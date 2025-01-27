@@ -31,18 +31,27 @@ async function chatbotWSRoute (fastify, options) {
       try {
         const answerStream = await chat(JSONmessage, ws);
 
-        for await (const chunk of answerStream) {
-          console.log(`Got Chat Response: ${chunk.answer}`);
+        console.log(answerStream);
 
-          //'{"type":"token","token":" Hello","source":""}'
-          const formattedAnswer = {
-            type: 'token',
-            token: chunk.answer,
-            source: ''
-          };
+        const formattedAnswer = {
+          type: 'token',
+          token: answerStream.content,
+          source: ''
+        };
 
-          ws.send(JSON.stringify(formattedAnswer));
-        }
+        ws.send(JSON.stringify(formattedAnswer));
+        // for await (const chunk of answerStream) {
+        //   console.log(`Got Chat Response: ${chunk.answer}`);
+
+        //   //'{"type":"token","token":" Hello","source":""}'
+        //   const formattedAnswer = {
+        //     type: 'token',
+        //     token: chunk.answer,
+        //     source: ''
+        //   };
+
+        //   ws.send(JSON.stringify(formattedAnswer));
+        // }
       } catch (err) {
         console.log(err);
       }
@@ -51,8 +60,8 @@ async function chatbotWSRoute (fastify, options) {
     });
 
     // AI Related Setup
-    const model = getModel().bind({ signal: controller.signal });
-    createChain(model);
+    const model = getModel();//.bind({ signal: controller.signal });
+    createChain(model, fastify);
   });
 }
 
