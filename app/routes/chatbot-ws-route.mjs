@@ -1,12 +1,13 @@
 import { getModel } from '../ai/ai.mjs';
-import {  createChain, chat, resetSessions } from '../ai/chatbot.mjs';
+import {  createChain, chat, resetSessions } from '../ai/chatbot-langgraph.mjs';
+import { v4 as uuidv4 } from 'uuid';
 
 async function chatbotWSRoute (fastify, options) {
   fastify.get('/ws/query', { websocket: true }, (ws, req) => {
     const controller = new AbortController();
-
+    const sessionId = uuidv4();
     ws.on('close', () => {
-      resetSessions(ws);
+      resetSessions(sessionId);
       controller.abort();
       console.log('connection closed');
     });
@@ -29,9 +30,9 @@ async function chatbotWSRoute (fastify, options) {
       console.log('Starting to Ask', new Date());
 
       try {
-        const answerStream = await chat(JSONmessage, ws);
+        const answerStream = await chat(JSONmessage, sessionId);
 
-        for await (const chunk of answerStream) {
+        for await (const [chunk, _metadata] of answerStream) {
           console.log(`Got Chat Response: ${chunk.content || chunk.answer}`);
 
           //'{"type":"token","token":" Hello","source":""}'
