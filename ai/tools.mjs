@@ -5,7 +5,6 @@ export function setupTools(fastify) {
   const updateClaimStatusTool = tool(
     async ({ claimId, claimStatus }) => {
       console.log('updating claim status', claimStatus);
-
       return fastify.sqlite.run('update claim set status = ? where id = ?', [claimStatus, claimId], (err, rows) => {
         console.log(err, rows);
         return `Claim Status updated to ${claimStatus} for claimId ${claimId}`;
