@@ -56,12 +56,6 @@ export async function createChain(model) {
     new MessagesPlaceholder('messages')
   ]);
 
-  const runnableChain = promptTemplate.pipe(model);
-  //Define state for the application
-  const InputStateAnnotation = Annotation.Root({
-    question: Annotation
-  });
-
   const StateAnnotation = Annotation.Root({
     question: Annotation,
     context: Annotation,
@@ -72,7 +66,6 @@ export async function createChain(model) {
   //Define the application steps
   const retrieve = async function(state) {
     // retrieve the relevant docs from the memory store
-    console.log(state.question.query);
     const retrievedDocs = await vectorStore.similaritySearch(state.question.query);
     return {
       context: retrievedDocs
@@ -82,6 +75,7 @@ export async function createChain(model) {
   const generate = async function(state) {
     const docsContent = state.context.map(docs => docs.pageContent).join('\n');
     state.messages.push({role: 'user', content: createQuestion(state.question)});
+    const runnableChain = promptTemplate.pipe(model);
     const response = await runnableChain.invoke({ messages: state.messages, context: docsContent });
     return { messages: [response] };
   }
@@ -102,7 +96,7 @@ export async function createChain(model) {
 export async function chat(question, sessionId) {
   const input = {
     question: question
-  }
+  };
 
   const config = {
     streamMode: 'messages',
