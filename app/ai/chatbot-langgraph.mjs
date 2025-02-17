@@ -3,6 +3,13 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+import {
+  AIMessage,
+  AIMessageChunk,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+} from "@langchain/core/messages";
 import { HuggingFaceTransformersEmbeddings } from "@langchain/community/embeddings/huggingface_transformers";
 import { MemoryVectorStore } from 'langchain/vectorstores/memory';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
@@ -16,10 +23,13 @@ import {
   StateGraph,
   MemorySaver
 } from '@langchain/langgraph';
+import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
+
+import { setupTools } from './tools.mjs';
 
 let app;
 
-export async function createChain(model) {
+export async function createChain(model, fastify) {
   //////////////////////////////////////////////////
   // Load the doc and store into the memory store //
   // Parse and load the pdf
@@ -40,6 +50,9 @@ export async function createChain(model) {
     splits,
     embeddings
   );
+
+  // Setup the tool
+  const updateClaimStatusTool = setupTools(fastify);
 
   ////////////////////////////////
   // CREATE CHAIN
@@ -65,6 +78,7 @@ export async function createChain(model) {
 
   //Define the application steps
   const retrieve = async function(state) {
+    console.log('Rag Retriever');
     // retrieve the relevant docs from the memory store
     const retrievedDocs = await vectorStore.similaritySearch(state.question.query);
     return {
@@ -73,20 +87,56 @@ export async function createChain(model) {
   }
 
   const generate = async function(state) {
+    console.log('Rag Generate and ask');
     const docsContent = state.context.map(docs => docs.pageContent).join('\n');
     state.messages.push({role: 'user', content: createQuestion(state.question)});
-    const runnableChain = promptTemplate.pipe(model);
+    // Need to add the tool to the model
+    const llmWithTools = model.bindTools([updateClaimStatusTool]);
+    const runnableChain = promptTemplate.pipe(llmWithTools);
     const response = await runnableChain.invoke({ messages: state.messages, context: docsContent });
+    console.log('response', response);
     return { messages: [response] };
+  }
+
+  const tools = new ToolNode([updateClaimStatusTool]);
+
+  const queryOrRespond = async function(state) {
+    let recentToolMessages = [];
+    for (let i = state["messages"].length - 1; i >= 0; i--) {
+      let message = state["messages"][i];
+      if (message instanceof ToolMessage) {
+        recentToolMessages.push(message);
+      } else {
+        break;
+      }
+    }
+    let toolMessages = recentToolMessages.reverse();
+    console.log('toolmessages', toolMessages);
+    const conversationMessages = state.messages.filter(
+      (message) =>
+        message instanceof HumanMessage ||
+        message instanceof SystemMessage ||
+        ((message instanceof AIMessage || message instanceof AIMessageChunk) && message.tool_calls.length == 0)
+    );
+
+    console.log('conversationMessages', conversationMessages);
+    return { messages: [conversationMessages] };
   }
 
   //Compile the applcation and test
   const workflow = new StateGraph(StateAnnotation)
     .addNode('retrieve', retrieve)
+    .addNode('tools', tools)
+    .addNode('queryOrRespond', queryOrRespond)
     .addNode('generate', generate)
     .addEdge(START, 'retrieve')
     .addEdge('retrieve', 'generate')
-    .addEdge('generate', END)
+    .addConditionalEdges('generate', toolsCondition, {
+      __end__: '__end__',
+      tools: 'tools'
+    })
+    .addEdge('tools', 'queryOrRespond')
+    .addEdge('queryOrRespond', END)
 
   const memory = new MemorySaver();
 
@@ -106,6 +156,7 @@ export async function chat(question, sessionId) {
   };
 
   const result = await app.stream(input, config);
+  console.log('returning the result', result);
   return result;
 }
 

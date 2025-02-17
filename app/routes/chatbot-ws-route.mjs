@@ -52,8 +52,8 @@ async function chatbotWSRoute (fastify, options) {
     });
 
     // AI Related Setup
-    const model = getModel().bind({ signal: controller.signal });
-    createChain(model);
+    const model = getModel();
+    createChain(model, fastify);
   });
 }
 
