@@ -1,5 +1,5 @@
 import { getModel } from '../ai/ai.mjs';
-import {  createChain, chat, resetSessions } from '../ai/chatbot-rag-history.mjs';
+import {  createChain, chat, resetSessions, toolChat } from '../ai/chatbot-rag-history.mjs';
 
 async function chatbotWSRoute (fastify, options) {
   fastify.get('/ws/query', { websocket: true }, (ws, req) => {
@@ -29,20 +29,28 @@ async function chatbotWSRoute (fastify, options) {
       console.log('Starting to Ask', new Date());
 
       try {
-        const answerStream = await chat(JSONmessage, ws);
+        // const answerStream = await chat(JSONmessage, ws);
 
-        for await (const chunk of answerStream) {
-          console.log(`Got Chat Response: ${chunk.content || chunk.answer}`);
+        // for await (const chunk of answerStream) {
+        //   console.log(`Got Chat Response: ${chunk.content || chunk.answer}`);
 
-          //'{"type":"token","token":" Hello","source":""}'
-          const formattedAnswer = {
-            type: 'token',
-            token: chunk.content || chunk.answer,
-            source: ''
-          };
+        //   //'{"type":"token","token":" Hello","source":""}'
+        //   const formattedAnswer = {
+        //     type: 'token',
+        //     token: chunk.content || chunk.answer,
+        //     source: ''
+        //   };
 
-          ws.send(JSON.stringify(formattedAnswer));
-        }
+        //   ws.send(JSON.stringify(formattedAnswer));
+        // }
+
+        const toolAnswer = await toolChat(JSONmessage, ws);
+        const formattedAnswer = {
+          type: 'token',
+          token: toolAnswer.content || toolAnswer.answer,
+          source: ''
+        };
+        ws.send(JSON.stringify(formattedAnswer));
       } catch (err) {
         console.log(err);
       }
@@ -51,8 +59,10 @@ async function chatbotWSRoute (fastify, options) {
     });
 
     // AI Related Setup
-    const model = getModel().bind({ signal: controller.signal });
-    createChain(model);
+    //const model = getModel().bind({ signal: controller.signal });
+    const model = getModel();
+
+    createChain(model, fastify);
   });
 }
 
