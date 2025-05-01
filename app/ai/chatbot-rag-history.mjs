@@ -57,7 +57,7 @@ export async function createChain(model, fastify) {
 export async function chat(question, sessionId) {
   const result = await chainWithHistory.stream(
     { input: createQuestion(question) },
-    { configurable: { sessionId: sessionId } }
+    { configurable: { sessionId: 'abc' } }
   );
 
   return result;
@@ -66,7 +66,7 @@ export async function chat(question, sessionId) {
 export async function toolChat(question, sessionId) {
   let result = await chainWithHistory.invoke(
     { input: createQuestion(question) },
-    { configurable: { sessionId: sessionId } }
+    { configurable: { sessionId: 'abc' } }
   );
 
   for (const toolCall of result.tool_calls) {

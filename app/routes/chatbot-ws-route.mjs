@@ -1,3 +1,26 @@
+import * as traceloop from '@traceloop/node-server-sdk';
+import { trace, context } from '@opentelemetry/api';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
+import { ConsoleSpanExporter } from '@opentelemetry/sdk-trace-node';
+
+import * as ChainsModule from 'langchain/chains';
+import * as ToolsModule from 'langchain/tools';
+import * as RunnablesModule from '@langchain/core/runnables';
+
+traceloop.initialize({
+  disableBatch: true,
+  exporter: new OTLPTraceExporter(),
+  instrumentModules: {
+    langchain: {
+      chainsModule: ChainsModule,
+      // agentsModule: AgentsModule,
+      toolsModule: ToolsModule,
+      // vectorStoreModule: VectorStoreModule,
+      runnablesModule: RunnablesModule
+    }
+  }
+});
+
 import { getModel } from '../ai/ai.mjs';
 import {  createChain, chat, resetSessions, toolChat } from '../ai/chatbot-rag-history.mjs';
 
@@ -44,13 +67,18 @@ async function chatbotWSRoute (fastify, options) {
         //   ws.send(JSON.stringify(formattedAnswer));
         // }
 
-        const toolAnswer = await toolChat(JSONmessage, ws);
-        const formattedAnswer = {
-          type: 'token',
-          token: toolAnswer.content || toolAnswer.answer,
-          source: ''
-        };
-        ws.send(JSON.stringify(formattedAnswer));
+        const tracer = trace.getTracer();
+        tracer.startActiveSpan('Asking the question', async (span) => {
+          const toolAnswer = await toolChat(JSONmessage, ws);
+          span.end();
+
+          const formattedAnswer = {
+            type: 'token',
+            token: toolAnswer.content || toolAnswer.answer,
+            source: ''
+          };
+          ws.send(JSON.stringify(formattedAnswer));
+        });
       } catch (err) {
         console.log(err);
       }
